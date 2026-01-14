@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Market KDS - Stratejik Yönetim Paneli V2.0</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #f0f2f5; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .kds-header { 
+            background: linear-gradient(120deg, #1565C0 0%, #0D47A1 100%); 
+            color: white; 
+            padding: 25px 0; 
+            margin-bottom: 25px; 
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+        .card { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 20px; transition: transform 0.2s; }
+        .card:hover { transform: translateY(-3px); }
+        .status-red { background-color: #ffebee !important; color: #b71c1c; font-weight: bold; border-left: 5px solid #b71c1c; }
+        .status-green { background-color: #e8f5e9 !important; color: #1b5e20; font-weight: bold; border-left: 5px solid #1b5e20; }
+        .alert-card-danger { border-left: 5px solid #d32f2f; background-color: #ffcdd2; }
+        .alert-card-warning { border-left: 5px solid #f57c00; background-color: #ffe0b2; }
+        .alert-card-info { border-left: 5px solid #1976d2; background-color: #bbdefb; }
+    </style>
+</head>
+<body>
+
+    <div class="kds-header text-center">
+        <div class="container">
+            <h1 class="display-6 fw-bold">🚀 Market Zinciri Karar Destek Sistemi</h1>
+            <p class="mb-0 opacity-75">Stratejik Planlama & Gelecek Tahmini (AI Powered)</p>
+        </div>
+    </div>
+
+    <div class="container">
+        
+        <div class="row" id="alertSection">
+            <div class="col-12 text-center text-muted py-3">Sistem verileri analiz ediyor...</div>
+        </div>
+
+        <div class="row mt-2">
+            <div class="col-md-12">
+                <div class="card p-4 border-primary" style="border-top: 5px solid #1565C0;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h4 class="text-primary"><i class="bi bi-graph-up-arrow"></i> 📈 Gelecek 6 Ay Ciro Projeksiyonu</h4>
+                            <p class="text-muted small mb-0">Lineer Regresyon Algoritması ile hesaplanan tahmini büyüme trendi.</p>
+                        </div>
+                        <span class="badge bg-primary fs-6">AI Forecast Modu</span>
+                    </div>
+                    <div style="height: 350px; margin-top: 15px;">
+                        <canvas id="tahminChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-md-8">
+                <div class="card p-3">
+                    <h5 class="card-title text-secondary">📊 Şube Bazlı Net Kâr/Zarar Analizi</h5>
+                    <div style="height: 250px;">
+                        <canvas id="karZararChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card p-3">
+                    <h5 class="card-title text-secondary">⚡ Enerji Altyapı Durumu</h5>
+                    <div style="height: 250px; display: flex; justify-content: center;">
+                        <canvas id="enerjiChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mt-4 mb-5">
+            <div class="col-md-12">
+                <div class="card p-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h4 class="mb-0">📋 Stratejik Karar Tablosu</h4>
+                        <button class="btn btn-outline-primary btn-sm" onclick="verileriGetir()">🔄 Verileri Güncelle</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-dark">
+                                <tr>
+                                    <th>Mağaza Adı</th>
+                                    <th>Bölge</th>
+                                    <th>Toplam Ciro</th>
+                                    <th>Giderler (Kira+Maaş)</th>
+                                    <th>Net Durum</th>
+                                    <th>KDS Karar Önerisi</th>
+                                </tr>
+                            </thead>
+                            <tbody id="finansTablosu">
+                                <tr><td colspan="6" class="text-center">Veriler Yükleniyor...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            verileriGetir();
+        });
+
+        // 1. ANA VERİ ÇEKME FONKSİYONU
+        async function verileriGetir() {
+            try {
+                // Paralel olarak tüm API'leri çağır (Daha hızlı açılır)
+                const [resFinans, resRekabet, resEnerji, resTahmin] = await Promise.all([
+                    fetch('http://localhost:3000/api/kds/finans'),
+                    fetch('http://localhost:3000/api/kds/rekabet'),
+                    fetch('http://localhost:3000/api/kds/enerji'),
+                    fetch('http://localhost:3000/api/kds/tahmin')
+                ]);
+
+                const dataFinans = await resFinans.json();
+                const dataRekabet = await resRekabet.json();
+                const dataEnerji = await resEnerji.json();
+                const dataTahmin = await resTahmin.json();
+
+                // Ekrana basma fonksiyonlarını çalıştır
+                uyarilariGoster(dataFinans, dataRekabet, dataEnerji);
+                tahminGrafiginiCiz(dataTahmin);
+                grafikleriCiz(dataFinans, dataEnerji);
+                tabloyuDoldur(dataFinans);
+
+            } catch (error) {
+                console.error("Hata:", error);
+                document.getElementById('alertSection').innerHTML = `
+                    <div class="col-12"><div class="alert alert-danger text-center">
+                        ❌ <strong>Sunucu Hatası:</strong> Node.js backend çalışmıyor olabilir. Lütfen 'node server.js' komutunu çalıştırın.
+                    </div></div>`;
+            }
+        }
+
+        // 2. TAHMİN GRAFİĞİ (En Önemli Kısım)
+        let tahminChartInstance = null; // Grafik tekrar çizilirse eskisi silinsin diye
+        function tahminGrafiginiCiz(data) {
+            const ctx = document.getElementById('tahminChart').getContext('2d');
+            
+            // Veri hazırlığı
+            const gecmisEtiketler = data.gecmis.map(d => d.ay);
+            const gelecekEtiketler = data.gelecek.map(d => d.ay);
+            const tumEtiketler = [...gecmisEtiketler, ...gelecekEtiketler];
+
+            const gecmisData = data.gecmis.map(d => d.ciro);
+            
+            // Gelecek çizgisi geçmişin bittiği yerden başlasın (Kopukluk olmasın)
+            const boslukluGelecekData = new Array(gecmisData.length - 1).fill(null);
+            boslukluGelecekData.push(gecmisData[gecmisData.length - 1]); // Bağlantı noktası
+            data.gelecek.forEach(d => boslukluGelecekData.push(d.ciro));
+
+            if(tahminChartInstance) tahminChartInstance.destroy();
+
+            tahminChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: tumEtiketler,
+                    datasets: [
+                        {
+                            label: 'Gerçekleşen Ciro',
+                            data: gecmisData,
+                            borderColor: '#2e7d32', // Yeşil
+                            backgroundColor: 'rgba(46, 125, 50, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            borderWidth: 3
+                        },
+                        {
+                            label: 'AI Tahmini (Forecasting)',
+                            data: boslukluGelecekData,
+                            borderColor: '#d32f2f', // Kırmızı
+                            borderDash: [10, 5], // Kesik Çizgi
+                            pointStyle: 'triangle',
+                            pointRadius: 6,
+                            fill: false,
+                            tension: 0.3,
+                            borderWidth: 3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { 
+                        tooltip: { callbacks: { label: (c) => formatMoney(c.raw) } }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, ticks: { callback: (val) => val / 1000 + 'k TL' } }
+                    }
+                }
+            });
+        }
+
+        // 3. UYARILARI GÖSTERME
+        function uyarilariGoster(finans, rekabet, enerji) {
+            const area = document.getElementById('alertSection');
+            area.innerHTML = ''; 
+
+            // Finans Uyarısı
+            const zarar = finans.filter(d => d.NetDurum < 0);
+            if (zarar.length > 0) {
+                area.innerHTML += `
+                <div class="col-md-4">
+                    <div class="card alert-card-danger p-3 h-100">
+                        <h5 class="text-danger">🚨 FİNANSAL ALARM</h5>
+                        <p class="mb-1"><strong>${zarar.length} Şube</strong> zarar bölgesinde.</p>
+                        <p class="small text-muted mb-0">Örn: ${zarar[0].MagazaAdi} acil incelenmeli.</p>
+                    </div>
+                </div>`;
+            }
+
+            // Rekabet Uyarısı
+            if (rekabet.length > 0) {
+                area.innerHTML += `
+                <div class="col-md-4">
+                    <div class="card alert-card-warning p-3 h-100">
+                        <h5 class="text-danger" style="color:#d32f2f;">⚔️ RAKİP TEHDİDİ</h5>
+                        <p class="mb-1"><strong>${rekabet[0].MagazaAdi}</strong> yakınına <strong>${rekabet[0].RakipAdi}</strong> açılıyor!</p>
+                        <p class="small text-muted mb-0 fw-bold">${rekabet[0].Stratejik_Oneri}</p>
+                    </div>
+                </div>`;
+            }
+
+            // Enerji Uyarısı
+            const eski = enerji.filter(d => d.EnerjiSinifi === 'F');
+            if (eski.length > 0) {
+                area.innerHTML += `
+                <div class="col-md-4">
+                    <div class="card alert-card-info p-3 h-100">
+                        <h5 class="text-primary">⚡ ENERJİ VERİMLİLİĞİ</h5>
+                        <p class="mb-1"><strong>${eski.length} adet F Sınıfı</strong> eski cihaz tespit edildi.</p>
+                        <p class="small text-muted mb-0">Değişim yatırımının geri dönüşü: ~14 Ay</p>
+                    </div>
+                </div>`;
+            }
+        }
+
+        // 4. DİĞER GRAFİKLER
+        let barChart = null;
+        let pieChart = null;
+
+        function grafikleriCiz(finans, enerji) {
+            // Bar Chart (İlk 15 Şube)
+            const top15 = finans.slice(0, 15);
+            const ctx1 = document.getElementById('karZararChart').getContext('2d');
+            const colors = top15.map(s => s.NetDurum < 0 ? '#d32f2f' : '#2e7d32');
+            
+            if(barChart) barChart.destroy();
+            barChart = new Chart(ctx1, {
+                type: 'bar',
+                data: {
+                    labels: top15.map(s => s.MagazaAdi.replace('Şubesi', '')),
+                    datasets: [{
+                        label: 'Net Kâr/Zarar',
+                        data: top15.map(s => s.NetDurum),
+                        backgroundColor: colors,
+                        borderRadius: 4
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // Pie Chart
+            const ctx2 = document.getElementById('enerjiChart').getContext('2d');
+            const aSinifi = enerji.filter(e => e.EnerjiSinifi.includes('A')).length;
+            const diger = enerji.length - aSinifi;
+
+            if(pieChart) pieChart.destroy();
+            pieChart = new Chart(ctx2, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Verimli (A/A++)', 'Verimsiz (C/F)'],
+                    datasets: [{
+                        data: [aSinifi, diger],
+                        backgroundColor: ['#4caf50', '#ef5350'],
+                        borderWidth: 0
+                    }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        // 5. TABLO DOLDURMA
+        function tabloyuDoldur(data) {
+            const tbody = document.getElementById('finansTablosu');
+            tbody.innerHTML = '';
+            
+            // Önce zarar edenleri en üste al
+            data.sort((a, b) => a.NetDurum - b.NetDurum);
+
+            data.forEach(sube => {
+                let rowClass = '';
+                if (sube.NetDurum < 0) rowClass = 'status-red';
+                else if (sube.NetDurum > 80000) rowClass = 'status-green';
+
+                const row = `
+                    <tr class="${rowClass}">
+                        <td><strong>${sube.MagazaAdi}</strong></td>
+                        <td>${sube.Bolge}</td>
+                        <td>${formatMoney(sube.Ciro)}</td>
+                        <td class="text-danger">-${formatMoney(sube.ToplamGider)}</td>
+                        <td class="fw-bold">${formatMoney(sube.NetDurum)}</td>
+                        <td>${sube.KDS_Onerisi}</td>
+                    </tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+
+        function formatMoney(amount) {
+            return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 }).format(amount);
+        }
+    </script>
+</body>
+</html>
